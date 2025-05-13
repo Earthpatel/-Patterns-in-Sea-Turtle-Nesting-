@@ -1,0 +1,102 @@
+---
+title: "Applied Assignment 3"
+author: "Earth Patel"
+date: "2025-05-09"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r libraries}
+rm(list= ls())
+library(tidyverse)
+library(dplyr)
+library(tidyverse)
+library(GLMsData)
+library(AICcmodavg)
+library(MASS)
+library(GGally)
+library(ggplot2)
+```
+
+```{r readingData}
+data <- read.csv("../data/nminer_messy.csv")
+colnames(data) <- data[1, ]
+colnames(data)
+data <- data[-1, ]  
+data <- na.omit(data)
+
+```
+
+```{r cleaningData}
+str(data)
+summary(data)
+
+# Converting each of the columns datatype into numeric form.=
+data <- data %>% mutate(across(everything(), as.numeric))
+str(data)
+
+```
+```{r plotting}
+ggplot(data, aes(x = factor(Miners), y = Eucs)) +
+  geom_boxplot(fill ="pink") +
+  labs(x = "Noisy Miner", y = "The Amount of Eucalypts",
+       title = "Eucalypt and Noisy Miner")
+
+ggplot(data, aes(x = factor(Miners), y = Bulokes)) +
+  geom_boxplot(fill = "blue") +
+  labs(x = "Noisy Miner", y = "Number of Buloke Trees",
+       title = "Buloke and Noisy Miner")
+
+ggplot(data, aes(x = factor(Shrubs), fill = factor(Miners))) +
+  geom_bar(position = "fill") +
+  labs(x = "Shrubs",y = "Sites' Percentage",
+       fill = "Miner Presence",
+       title = "Noisy Miner and Shrub Cover")
+
+```
+
+
+```{r runningGLM_model}
+glm_model <- glm(Miners ~ Eucs + Bulokes, 
+                         family = binomial(link = "logit"), 
+                         data = data)
+summary(glm_model)
+cat("AIC:", AIC(glm_model), "\n")
+## AIC: 25.16787
+cat("Residual Deviance:", deviance(glm_model), "\n")
+## Residual Deviance: 19.16787 
+cat("Residual DF:", df.residual(glm_model), "\n")
+## Residual DF: 19.16787 
+cat("Dispersion (c-hat):", deviance(glm_model) / df.residual(glm_model), "\n")
+## Dispersion (c-hat): 0.684566
+
+```
+
