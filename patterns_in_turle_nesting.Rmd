@@ -1,0 +1,263 @@
+---
+title: "Patterns in Turtle Nesting"
+author: "Earth Patel"
+date: "2025-05-08"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r libraries, echo=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(dplyr)
+library(openxlsx)
+library(readxl)
+library(lubridate) 
+
+```
+
+```{r reading}
+nesting_hatching_data <- read_excel("../Data/Vital Action NE.xlsx")
+exhumation_data <- read_excel("../Data/Vital Action EX.xlsx")
+
+```
+
+```{r data_review}
+
+summary(nesting_hatching_data)
+str(nesting_hatching_data)
+head(nesting_hatching_data) 
+colnames(nesting_hatching_data)
+
+
+```
+```{r cleaning_exhumation_data}
+str(exhumation_data)
+
+exhumation_data$time_1 <- format(exhumation_data$time_1, "%H:%M")
+
+
+str(exhumation_data$time_1)
+
+```
+
+```{r cleaning_data}
+nesting_hatching_data$time_nest_sighted <- as.numeric(nesting_hatching_data$time_nest_sighted) * 24
+nesting_hatching_data$time_nest_sighted <- format(
+  as.POSIXct(nesting_hatching_data$time_nest_sighted * 3600, origin = "1970-01-01", tz = "UTC"),
+  "%H:%M"
+)
+nesting_hatching_data$time_nest_buried <- format(nesting_hatching_data$time_nest_buried, "%H:%M")
+str(nesting_hatching_data)
+
+nesting_hatching_data$time_hatch_1 <- as.numeric(nesting_hatching_data$time_hatch_1)
+nesting_hatching_data$time_hatch_1 <- format(
+  as.POSIXct(nesting_hatching_data$time_hatch_1 * 3600, origin = "1970-01-01", tz = "UTC"),
+  "%H:%M"
+)
+
+nesting_hatching_data$time_hatch_2 <- format(nesting_hatching_data$time_hatch_2, "%H:%M")
+nesting_hatching_data$time_hatch_3 <- format(nesting_hatching_data$time_hatch_3, "%H:%M")
+nesting_hatching_data$time_hatch_4 <- format(nesting_hatching_data$time_hatch_4, "%H:%M")
+
+
+```
+
+```{r date_arrange}
+
+nesting_hatching_data$date_nest <- as.Date(nesting_hatching_data$date_nest)
+
+nesting_hatching_data <- nesting_hatching_data %>%
+  arrange(date_nest)
+
+```
+
+```{r removing_NA_values_end}
+
+nesting_hatching_data <- nesting_hatching_data %>%
+  slice(1:713)
+```
+
+```{r dividing_into_2_datasets}
+nesting <- nesting_hatching_data %>%
+  select(1:which(names(.) == "guard"))
+
+hatching <- nesting_hatching_data %>%
+  select(which(names(.) == "n_hatches"):which(names(.) == "NOTES"))
+
+hatching <- hatching %>%
+  mutate(
+    location_code = nesting$location_code,
+    date_nest = nesting$date_nest,
+    n_eggs = nesting$n_eggs
+  )
+
+hatching <- hatching %>%
+  relocate(location_code, date_nest, n_eggs, .before = 1)
+
+```
+
+```{r removing_NA_values}
+
+hatching <- hatching %>%
+  filter(!is.na(n_hatchlings_1))
+
+```
+
+```{r success_rate}
+
+hatching <- hatching %>%
+  mutate(
+    n_hatchlings_1 = as.numeric(n_hatchlings_1),
+    n_hatchlings_2 = as.numeric(n_hatchlings_2),
+    n_hatchlings_3 = as.numeric(n_hatchlings_3),
+    n_hatchlings_4 = as.numeric(n_hatchlings_4)
+  ) %>%
+  mutate(
+    n_hatchlings_1 = replace_na(n_hatchlings_1, 0),
+    n_hatchlings_2 = replace_na(n_hatchlings_2, 0),
+    n_hatchlings_3 = replace_na(n_hatchlings_3, 0),
+    n_hatchlings_4 = replace_na(n_hatchlings_4, 0)
+  )
+
+
+hatching <- hatching %>%
+  filter(!is.na(n_eggs))
+
+hatching <- hatching %>%
+  mutate(
+    across(c(n_hatchlings_1, n_hatchlings_2, n_hatchlings_3, n_hatchlings_4, n_eggs), as.numeric),
+    total_hatchlings = rowSums(across(starts_with("n_hatchlings_")), na.rm = TRUE),
+    success_rate = round((total_hatchlings / n_eggs) * 100, 2) 
+  )
+hatching <- hatching %>%
+    relocate(total_hatchlings, success_rate, .after = n_eggs)
+
+hatching <- hatching %>%
+  filter(success_rate <= 100)
+```
+
+```{r trend_of_successrate_yearly}
+hatching <- hatching %>%
+  mutate(year = year(date_nest))
+
+yearly_summary <- hatching %>%
+  group_by(year) %>%
+  summarise(
+    avg_success_rate = mean(success_rate, na.rm = TRUE),
+    n = n()
+  ) %>%
+  filter(!(year %in% c(2020, 2024)))
+
+ggplot(yearly_summary, aes(x = factor(year), y = avg_success_rate)) +
+  geom_col(fill = "blue") +
+  labs(
+    title = "The Average Nesting Success Rate by Year",
+    x = "Year",
+    y = "Average Success Rate (%)"
+  ) 
+
+```
+
+```{r dictionary}
+hatching_cleaned <- hatching %>%
+  filter(success_rate <= 100, !is.na(location_code))
+
+location_success <- hatching_cleaned %>%
+  group_by(location_code) %>%
+  summarise(mean_success = mean(success_rate, na.rm = TRUE)) %>%
+  arrange(desc(mean_success))
+
+location_dict <- setNames(as.list(location_success$mean_success), location_success$location_code)
+
+aov_result <- aov(mean_success ~ substr(location_code, 1, 1), data = location_success)
+summary(aov_result)
+
+
+```
+
+
+```{r plotting_the_correlation}
+
+locationSuccess <- data.frame(
+  location_code = names(location_dict),
+  mean_success_rate = unlist(location_dict),
+  stringsAsFactors = FALSE
+)
+
+locationSuccess <- locationSuccess %>%
+  mutate(
+    group = substr(location_code, 1, 1),
+    color_label = case_when(
+      group %in% c("A", "B") ~ "A–B",
+      group %in% c("C", "D") ~ "C–D",
+      group %in% c("E", "F") ~ "E–F",
+      group %in% c("G", "H") ~ "G–H",
+      group == "I" ~ "I",
+      TRUE ~ "Other"
+    ),
+    location_code = factor(location_code, levels = location_code)
+  )
+
+ggplot(locationSuccess, aes(x = location_code, y = mean_success_rate, color = color_label)) +
+  geom_point(size = 4) +
+  scale_color_manual(
+    values = c("A–B" = "red", "C–D" = "blue", "E–F" = "green", "G–H" = "purple", "I" = "orange", "Other" = "gray"),
+    name = "Letter Group"
+  ) +
+  labs(
+    title = "Mean Nesting Success Rate by Location Code",
+    x = "Location Code",
+    y = "Mean Success Rate (%)"
+  ) +
+  theme_minimal() +
+  theme( axis.text.x = element_text(angle = 45, hjust = 1, size = 6)  
+)
+ 
+
+```
+
+```{r best_and_worst_performing_nests}
+
+cat("Top 6 Location Zones with Highest Success Rates:\n")
+apply(head(locationSuccess), 1, function(row) cat(paste(row, collapse = " | "), "\n"))
+
+cat("\nTop 6 Location Zones with Lowest Success Rates:\n")
+apply(tail(locationSuccess), 1, function(row) cat(paste(row, collapse = " | "), "\n"))
+
+
+```
+```{r average_success_by_letter}
+location_success$letter <- substr(location_success$location_code, 1, 1)
+
+avg_success_by_letter <- location_success %>%
+  group_by(letter) %>%
+  summarise(mean_success_rate = mean(mean_success, na.rm = TRUE)) %>%
+  arrange(desc(mean_success_rate))
+```
+
